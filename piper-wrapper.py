@@ -50,13 +50,13 @@ def start_piper_http() -> None:
 
             try:
                 data = json.loads(body)
-                text = data.get("text", "")
+                input = data.get("input", "")
             except (json.JSONDecodeError, KeyError):
                 self.send_error(400, "Invalid JSON")
                 return
 
-            if not text:
-                self.send_error(400, "Missing 'text' field")
+            if not input:
+                self.send_error(400, "Missing 'input' field")
                 return
 
             # Synthese
@@ -65,7 +65,7 @@ def start_piper_http() -> None:
                 wav_file.setnchannels(1)
                 wav_file.setsampwidth(2)
                 wav_file.setframerate(22050)
-                _piper_voice.synthesize_wav(text, wav_file)
+                _piper_voice.synthesize_wav(input, wav_file)
 
             wav_data = buf.getvalue()
 
