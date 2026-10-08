@@ -29,6 +29,7 @@ piper-wrapper.py
 | `PIPER_PORT` | `8083` | Piper-Port |
 | `PIPER_MODEL` | `models/de_DE-thorsten-high.onnx` | Voice-Modell (109 MB) |
 | `API_KEY` | `PIPER_ENV_KEY` (Env-Var) | Auth-Key |
+| `USE_GPU` | `1`/`true`/`yes`/`on` (Env-Var) | GPU-Beschleunigung (CUDA/ROCm) |
 
 ## Commands
 
@@ -40,6 +41,9 @@ pip install -r requirements.txt
 
 # Starten
 PIPER_ENV_KEY="mein_key" python piper-wrapper.py
+
+# Starten mit GPU-Beschleunigung (AMD ROCm / NVIDIA CUDA)
+USE_GPU=1 PIPER_ENV_KEY="mein_key" python piper-wrapper.py
 
 # Test (OpenAI-Format: {"input": "..."})
 curl -X POST -H "Content-Type: application/json" \

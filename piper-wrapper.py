@@ -28,6 +28,7 @@ PIPER_HOST = "127.0.0.1"
 PIPER_PORT = 8083
 PIPER_MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "de_DE-thorsten-high.onnx")
 API_KEY = os.environ.get("PIPER_ENV_KEY", "")
+USE_GPU = os.environ.get("USE_GPU", "").lower() in ("1", "true", "yes", "on")
 
 # ─── Piper HTTP-Server (Flask) auf Port 8083 ─────────────────────────────────
 
@@ -40,8 +41,8 @@ def start_piper_http() -> None:
     global _piper_voice
 
     # Voice laden
-    _piper_voice = piper.voice.PiperVoice.load(PIPER_MODEL)
-    print(f"Voice loaded: {PIPER_MODEL}")
+    _piper_voice = piper.voice.PiperVoice.load(PIPER_MODEL, use_cuda=USE_GPU)
+    print(f"Voice loaded: {PIPER_MODEL} (GPU={'yes' if USE_GPU else 'no'})")
 
     app = Flask(__name__)
 
