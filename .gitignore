@@ -13,6 +13,9 @@ __pycache__/
 .venv/
 venv/
 
+# Models (large binary files)
+models/
+
 # OS
 .DS_Store
 Thumbs.db

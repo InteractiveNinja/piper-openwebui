@@ -11,9 +11,12 @@ import json
 import os
 import signal
 import sys
+import threading
 import wave
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Thread
+
+from flask import Flask, request
 
 import piper
 
@@ -26,111 +29,81 @@ PIPER_PORT = 8083
 PIPER_MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "de_DE-thorsten-high.onnx")
 API_KEY = os.environ.get("PIPER_ENV_KEY", "")
 
-# ─── Piper HTTP-Server (eigener kleiner Server auf Port 8083) ────────────────
+# ─── Piper HTTP-Server (Flask) auf Port 8083 ─────────────────────────────────
 
 _piper_voice: piper.voice.PiperVoice | None = None
+_piper_ready = threading.Event()
 
 
 def start_piper_http() -> None:
-    """Startet einen HTTP-Server auf Port 8083, der Piper-Synthese anbietet."""
+    """Startet einen Flask-Server auf Port 8083, der Piper-Synthese anbietet."""
     global _piper_voice
 
     # Voice laden
     _piper_voice = piper.voice.PiperVoice.load(PIPER_MODEL)
     print(f"Voice loaded: {PIPER_MODEL}")
 
-    class PiperHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:
-            if self.path != "/synthesize":
-                self.send_error(404)
-                return
+    app = Flask(__name__)
 
-            content_length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(content_length) if content_length else b""
-
-            try:
-                data = json.loads(body)
-                input = data.get("input", "")
-            except (json.JSONDecodeError, KeyError):
-                self.send_error(400, "Invalid JSON")
-                return
-
-            if not input:
-                self.send_error(400, "Missing 'input' field")
-                return
-
-            # Synthese
-            buf = io.BytesIO()
-            with wave.open(buf, "wb") as wav_file:
-                wav_file.setnchannels(1)
-                wav_file.setsampwidth(2)
-                wav_file.setframerate(22050)
-                _piper_voice.synthesize_wav(input, wav_file)
-
-            wav_data = buf.getvalue()
-
-            self.send_response(200)
-            self.send_header("Content-Type", "audio/wav")
-            self.send_header("Content-Length", str(len(wav_data)))
-            self.end_headers()
-            self.wfile.write(wav_data)
-
-        def do_GET(self) -> None:
-            if self.path == "/info":
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok"}).encode())
-            else:
-                self.send_error(404)
-
-        def log_message(self, fmt, *args):
-            sys.stderr.write(f"[piper] {fmt % args}\n")
-
-    server = HTTPServer((PIPER_HOST, PIPER_PORT), PiperHandler)
-    server.serve_forever()
-
-
-# ─── Open WebUI Bridge-Handler ──────────────────────────────────────────────
-
-class BridgeHandler(BaseHTTPRequestHandler):
-    """Empfangt /audio/speech und leitet an Piper weiter."""
-
-    def do_POST(self) -> None:
-        if self.path != "/audio/speech":
-            self.send_error(404)
-            return
-
-        # Auth-Check
-        if API_KEY and self.headers.get("X-API-Key") != API_KEY:
-            self.send_response(401)
-            self.end_headers()
-            self.wfile.write(b'{"error": "unauthorized"}')
-            return
-
-        # Body lesen und an Piper forwarden
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length) if content_length else b""
-
+    @app.route("/synthesize", methods=["POST"])
+    def synthesize() -> tuple:
+        body = request.get_data(as_text=True)
         try:
-            import urllib.request
+            data = json.loads(body)
+            text = data.get("input", "")
+        except (json.JSONDecodeError, KeyError):
+            return ("Invalid JSON", 400)
 
-            url = f"http://{PIPER_HOST}:{PIPER_PORT}/synthesize"
-            req = urllib.request.Request(url, data=body, method="POST")
-            req.add_header("Content-Type", "application/json")
-            resp = urllib.request.urlopen(url, data=body, timeout=30)
-            wav_data = resp.read()
+        if not text:
+            return ("Missing 'input' field", 400)
 
-            self.send_response(200)
-            self.send_header("Content-Type", "audio/wav")
-            self.send_header("Content-Length", str(len(wav_data)))
-            self.end_headers()
-            self.wfile.write(wav_data)
-        except Exception as exc:
-            self.send_error(502, f"Piper error: {exc}")
+        # Synthese
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(22050)
+            _piper_voice.synthesize_wav(text, wav_file)
 
-    def log_message(self, fmt, *args):
-        sys.stderr.write(f"[wrapper] {fmt % args}\n")
+        wav_data = buf.getvalue()
+        return (wav_data, 200, {"Content-Type": "audio/wav", "Content-Length": str(len(wav_data))})
+
+    @app.route("/info", methods=["GET"])
+    def info() -> tuple:
+        return (json.dumps({"status": "ok"}), 200, {"Content-Type": "application/json"})
+
+    # Server ready signal
+    _piper_ready.set()
+
+    app.run(host=PIPER_HOST, port=PIPER_PORT, use_reloader=False, threaded=True)
+
+
+# ─── Open WebUI Bridge-Flask-App auf Port 8082 ───────────────────────────────
+
+bridge_app = Flask(__name__)
+
+
+def _forward_synthesize(body: bytes) -> tuple:
+    """Forward body to Piper HTTP-Server und gibt WAV zurück."""
+    import urllib.request
+
+    url = f"http://{PIPER_HOST}:{PIPER_PORT}/synthesize"
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    resp = urllib.request.urlopen(url, data=body, timeout=30)
+    wav_data = resp.read()
+    return (wav_data, 200, {"Content-Type": "audio/wav", "Content-Length": str(len(wav_data))})
+
+
+@bridge_app.route("/audio/speech", methods=["POST"])
+def audio_speech() -> tuple:
+    """Empfangt /audio/speech und leitet an Piper weiter."""
+    # Auth-Check
+    if API_KEY and request.headers.get("X-API-Key") != API_KEY:
+        return ("unauthorized", 401, {"Content-Type": "text/plain"})
+
+    body = request.get_data()
+    return _forward_synthesize(body)
 
 
 # ─── Main ───────────────────────────────────────────────────────────────────
@@ -141,41 +114,24 @@ def main() -> None:
     piper_thread.start()
 
     # Auf Piper-Ready warten
-    import time
-    import urllib.request
-
-    url = f"http://{PIPER_HOST}:{PIPER_PORT}/info"
-    deadline = time.monotonic() + 10.0
-    ready = False
-    while time.monotonic() < deadline:
-        try:
-            resp = urllib.request.urlopen(url, timeout=2)
-            if resp.status == 200:
-                ready = True
-                break
-        except Exception:
-            pass
-        time.sleep(0.5)
-
-    if not ready:
+    if not _piper_ready.wait(timeout=10.0):
         print("ERROR: Piper did not become ready within timeout", file=sys.stderr)
         sys.exit(1)
 
     print(f"Piper ready on {PIPER_HOST}:{PIPER_PORT}")
 
     # Bridge-Server starten
-    server = HTTPServer((HOST, PORT), BridgeHandler)
     print(f"Bridge listening on http://{HOST}:{PORT}")
 
-    # Graceful Shutdown
+    # Graceful Shutdown via SIGINT / SIGTERM
     def handle_signal(signum, frame):
         print("\nShutting down...")
-        server.shutdown()
+        sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    server.serve_forever()
+    bridge_app.run(host=HOST, port=PORT, use_reloader=False)
 
 
 if __name__ == "__main__":
