@@ -1,5 +1,8 @@
 # Piper TTS Bridge für Open WebUI
 
+> ⚠️ **Hinweis:** Dieser Code wurde vollständig von einer KI generiert und nicht manuell geprüft.
+> Nutze ihn auf eigene Gefahr und prüfe kritische Stellen (Auth, Network, TTS-Qualität) vor Produktiveinsatz.
+
 Ein kleiner Flask-Wrapper, der Open WebUIs TTS-Endpunkt (`/audio/speech`) an einen lokalen Piper TTS-Server weiterleitet.
 
 ## Features
