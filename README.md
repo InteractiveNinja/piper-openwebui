@@ -37,7 +37,7 @@ Unter **Settings → Audio → Text-to-Speech**:
 |------|------|
 | Provider | `Custom` |
 | URL | `http://localhost:8082/audio/speech` |
-| API-Key | `dein_geheimer_key` |
+| API-Key | `dein_geheimer_key` (als `Authorization: Bearer ...`) |
 | Model | `de_DE-thorsten-high` |
 
 ## Port-Übersicht
@@ -52,8 +52,8 @@ Unter **Settings → Audio → Text-to-Speech**:
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: dein_geheimer_key" \
-  -d '{"text": "Hallo Welt"}' \
+  -H "Authorization: Bearer dein_geheimer_key" \
+  -d '{"input": "Hallo Welt"}' \
   http://127.0.0.1:8082/audio/speech -o test.wav
 ```
 

@@ -98,8 +98,11 @@ def _forward_synthesize(body: bytes) -> tuple:
 @bridge_app.route("/audio/speech", methods=["POST"])
 def audio_speech() -> tuple:
     """Empfangt /audio/speech und leitet an Piper weiter."""
-    # Auth-Check
-    if API_KEY and request.headers.get("X-API-Key") != API_KEY:
+    # Auth-Check (Authorization: Bearer <key>)
+    auth = request.headers.get("Authorization", "")
+    if API_KEY and not auth.startswith("Bearer "):
+        return ("unauthorized", 401, {"Content-Type": "text/plain"})
+    if API_KEY and auth != f"Bearer {API_KEY}":
         return ("unauthorized", 401, {"Content-Type": "text/plain"})
 
     body = request.get_data()
