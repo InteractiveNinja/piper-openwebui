@@ -10,6 +10,7 @@ Ein kleiner Flask-Wrapper, der Open WebUIs TTS-Endpunkt (`/audio/speech`) an ein
 - **API-Endpunkt:** `POST /audio/speech` (Open WebUI Standard)
 - **Piper HTTP-Server:** Läuft auf Port 8083, antwortet auf `/synthesize`
 - **API-Key-Auth:** Über Umgebungsvariable `PIPER_ENV_KEY`
+- **GPU-Beschleunigung:** Optional via `USE_GPU=1` (NVIDIA CUDA / AMD ROCm)
 - **Graceful Shutdown:** Piper wird bei `Ctrl+C` sauber beendet
 
 ## Setup
@@ -22,11 +23,18 @@ source .venv/bin/activate
 # Dependencies
 pip install -r requirements.txt
 
+# GPU-Beschleunigung (optional)
+# pip install onnxruntime-rocm   # AMD
+# pip install onnxruntime-gpu    # NVIDIA
+
 # API-Key setzen
 export PIPER_ENV_KEY="dein_geheimer_key"
 
 # Wrapper starten
 python piper-wrapper.py
+
+# Wrapper mit GPU starten
+USE_GPU=1 python piper-wrapper.py
 ```
 
 ## Open WebUI-Konfiguration
@@ -56,6 +64,22 @@ curl -X POST \
   -d '{"input": "Hallo Welt"}' \
   http://127.0.0.1:8082/audio/speech -o test.wav
 ```
+
+## GPU-Beschleunigung
+
+Um die Synthese auf einer AMD- oder NVIDIA-GPU auszuführen:
+
+```bash
+USE_GPU=1 python piper-wrapper.py
+```
+
+Voraussetzungen für AMD ROCm:
+- `onnxruntime-rocm` installiert
+- `libhipblas.so.3` verfügbar (ggf. manuell nachinstallieren)
+
+Voraussetzungen für NVIDIA CUDA:
+- `onnxruntime-gpu` installiert
+- CUDA Toolkit / NVIDIA Treiber
 
 ## Struktur
 
