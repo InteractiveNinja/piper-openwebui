@@ -30,19 +30,56 @@ PIPER_MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models",
 API_KEY = os.environ.get("PIPER_ENV_KEY", "")
 USE_GPU = os.environ.get("USE_GPU", "").lower() in ("1", "true", "yes", "on")
 
+# ─── Voice-Cache ─────────────────────────────────────────────────────────────
+
+_piper_voices: dict[str, piper.voice.PiperVoice] = {}
+
+
+def _discover_voices() -> dict[str, str]:
+    """Scanne models/ auf .onnx-Dateien und mappe {name: pfad}."""
+    mapping: dict[str, str] = {}
+    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+    if not os.path.isdir(models_dir):
+        return mapping
+    for fname in os.listdir(models_dir):
+        if fname.endswith(".onnx"):
+            voice_name = fname.rsplit(".", 1)[0]  # strip extension
+            mapping[voice_name] = os.path.join(models_dir, fname)
+    return mapping
+
+
+def _resolve_voice(voice_name: str) -> str | None:
+    """Gibt Modell-Pfad für eine Stimme zurück."""
+    if voice_name == "default":
+        return PIPER_MODEL
+    mapping = _discover_voices()
+    return mapping.get(voice_name)
+
+
+def _get_voice(voice_name: str) -> piper.voice.PiperVoice:
+    """Liefert eine PiperVoice, cached nach Model-Pfad."""
+    path = _resolve_voice(voice_name)
+    if path is None:
+        raise ValueError(f"Unbekannte Stimme: {voice_name}")
+    if path not in _piper_voices:
+        _piper_voices[path] = piper.voice.PiperVoice.load(path, use_cuda=USE_GPU)
+    return _piper_voices[path]
+
 # ─── Piper HTTP-Server (Flask) auf Port 8083 ─────────────────────────────────
 
-_piper_voice: piper.voice.PiperVoice | None = None
 _piper_ready = threading.Event()
 
 
 def start_piper_http() -> None:
     """Startet einen Flask-Server auf Port 8083, der Piper-Synthese anbietet."""
-    global _piper_voice
+    # Default-Model initial laden
+    _piper_voices.clear()
+    _piper_voices[PIPER_MODEL] = piper.voice.PiperVoice.load(PIPER_MODEL, use_cuda=USE_GPU)
+    print(f"Default voice loaded: {PIPER_MODEL} (GPU={'yes' if USE_GPU else 'no'})")
 
-    # Voice laden
-    _piper_voice = piper.voice.PiperVoice.load(PIPER_MODEL, use_cuda=USE_GPU)
-    print(f"Voice loaded: {PIPER_MODEL} (GPU={'yes' if USE_GPU else 'no'})")
+    # Alle verfügbaren Stimmen loggen
+    voices = _discover_voices()
+    print(f"Available voices: {', '.join(voices.keys())}")
 
     app = Flask(__name__)
 
@@ -52,11 +89,18 @@ def start_piper_http() -> None:
         try:
             data = json.loads(body)
             text = data.get("input", "")
+            voice_name = data.get("voice", "default")
         except (json.JSONDecodeError, KeyError):
             return ("Invalid JSON", 400)
 
         if not text:
             return ("Missing 'input' field", 400)
+
+        # Voice auflösen und laden
+        try:
+            voice = _get_voice(voice_name)
+        except ValueError as exc:
+            return (str(exc), 400)
 
         # Synthese
         buf = io.BytesIO()
@@ -64,7 +108,7 @@ def start_piper_http() -> None:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(22050)
-            _piper_voice.synthesize_wav(text, wav_file)
+            voice.synthesize_wav(text, wav_file)
 
         wav_data = buf.getvalue()
         return (wav_data, 200, {"Content-Type": "audio/wav", "Content-Length": str(len(wav_data))})

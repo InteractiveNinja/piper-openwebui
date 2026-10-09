@@ -27,9 +27,10 @@ piper-wrapper.py
 | `PORT` | `8082` | Bridge-Port |
 | `PIPER_HOST` | `127.0.0.1` | Piper-Listen-Adresse |
 | `PIPER_PORT` | `8083` | Piper-Port |
-| `PIPER_MODEL` | `models/de_DE-thorsten-high.onnx` | Voice-Modell (109 MB) |
+| `PIPER_MODEL` | `models/de_DE-thorsten-high.onnx` | Default Voice-Modell |
 | `API_KEY` | `PIPER_ENV_KEY` (Env-Var) | Auth-Key |
 | `USE_GPU` | `1`/`true`/`yes`/`on` (Env-Var) | GPU-Beschleunigung (CUDA/ROCm) |
+| `voice` | `models/{voice}.onnx` | Stimme aus Request-Body |
 
 ## Commands
 

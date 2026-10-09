@@ -9,6 +9,7 @@ Ein kleiner Flask-Wrapper, der Open WebUIs TTS-Endpunkt (`/audio/speech`) an ein
 
 - **API-Endpunkt:** `POST /audio/speech` (Open WebUI Standard)
 - **Piper HTTP-Server:** Läuft auf Port 8083, antwortet auf `/synthesize`
+- **Stimmen-Auswahl:** `voice`-Parameter wählt `models/{voice}.onnx`
 - **API-Key-Auth:** Über Umgebungsvariable `PIPER_ENV_KEY`
 - **GPU-Beschleunigung:** Optional via `USE_GPU=1` (NVIDIA CUDA / AMD ROCm)
 - **Graceful Shutdown:** Piper wird bei `Ctrl+C` sauber beendet
@@ -54,6 +55,27 @@ Unter **Settings → Audio → Text-to-Speech**:
 |--------|------|
 | Piper TTS HTTP | 8083 |
 | Wrapper (Open WebUI Bridge) | 8082 |
+
+## Stimmen-Auswahl
+
+Legen Sie `.onnx`-Modelle direkt in `models/` ab:
+
+```bash
+ls models/*.onnx
+# models/alloy.onnx  models/de_DE-thorsten-high.onnx
+```
+
+Die Stimme wird über das `voice`-Feld gewählt:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer dein_geheimer_key" \
+  -d '{"voice": "alloy", "input": "Hallo Welt"}' \
+  http://127.0.0.1:8082/audio/speech -o alloy.wav
+```
+
+Kein `voice`-Feld → Default-Modell (`de_DE-thorsten-high.onnx`).
+Unbekannte Stimme → `400`.
 
 ## Test
 
